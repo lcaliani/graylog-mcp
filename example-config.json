@@ -1,14 +1,16 @@
 {
     "mcpServers": {
-        "simple-graylog-mcp": {
+        "graylog-mcp": {
             "command": "node",
             "args": [
-              "/path/to/graylog-mcp/src/index.js"
+                "/path/to/graylog-mcp/src/index.js"
             ],
             "env": {
-              "BASE_URL": "http://graylog1.internal.net.br:9000",
-              "API_TOKEN": "YOUR_GRAYLOG_API_TOKEN_HERE"
+                "BASE_URL_NEGOCIO":  "http://your-business-graylog.example.com",
+                "API_TOKEN_NEGOCIO": "YOUR_NEGOCIO_TOKEN_HERE",
+                "BASE_URL_DEBUG":    "http://your-debug-graylog.example.com:9000",
+                "API_TOKEN_DEBUG":   "YOUR_DEBUG_TOKEN_HERE"
             }
-          }
+        }
     }
 }
