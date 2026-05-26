@@ -8,20 +8,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import axios from "axios";
 
-// Load all Graylog instances from environment variables (no fixed limit).
-// An instance is active only if both BASE_URL and API_TOKEN are set.
-// Instances are discovered by scanning env vars matching GRAYLOG_BASE_URL_INSTANCE_N,
-// where N is any positive integer. They are sorted numerically before use.
-// Backward compatibility: BASE_URL + API_TOKEN (no suffix) map to INSTANCE_1.
 function loadInstances() {
-    // Collect all instance numbers declared via GRAYLOG_BASE_URL_INSTANCE_N
     const declaredNumbers = Object.keys(process.env)
         .map(key => key.match(/^GRAYLOG_BASE_URL_INSTANCE_(\d+)$/))
         .filter(Boolean)
         .map(match => parseInt(match[1], 10))
         .sort((a, b) => a - b);
 
-    // Always attempt instance 1 to support the BASE_URL fallback
     const numbers = declaredNumbers.includes(1) ? declaredNumbers : [1, ...declaredNumbers];
 
     const instances = [];
@@ -53,8 +46,6 @@ if (INSTANCES.length === 0) {
     );
 }
 
-// Build a lookup map by label for fast resolution.
-// If two instances share the same label, the first one wins and a warning is emitted.
 const INSTANCE_BY_LABEL = {};
 for (const inst of INSTANCES) {
     if (INSTANCE_BY_LABEL[inst.label]) {
