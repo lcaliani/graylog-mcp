@@ -1,14 +1,20 @@
 {
     "mcpServers": {
-        "simple-graylog-mcp": {
+        "graylog-mcp": {
             "command": "node",
             "args": [
-              "/path/to/graylog-mcp/src/index.js"
+                "/path/to/graylog-mcp/src/index.js"
             ],
             "env": {
-              "BASE_URL": "http://graylog1.internal.net.br:9000",
-              "API_TOKEN": "YOUR_GRAYLOG_API_TOKEN_HERE"
-            }
-          }
+                "GRAYLOG_BASE_URL_INSTANCE_1":  "http://your-graylog-instance-1.example.com:9000",
+                "GRAYLOG_API_TOKEN_INSTANCE_1": "YOUR_TOKEN_HERE",
+                "GRAYLOG_LABEL_INSTANCE_1":     "production",
+
+                "GRAYLOG_BASE_URL_INSTANCE_2":  "http://your-graylog-instance-2.example.com:9000",
+                "GRAYLOG_API_TOKEN_INSTANCE_2": "YOUR_TOKEN_HERE",
+                "GRAYLOG_LABEL_INSTANCE_2":     "staging"
+            },
+            "_comment": "Add as many instances as needed by incrementing the suffix (INSTANCE_3, INSTANCE_4, ...). Only instances with both BASE_URL and API_TOKEN set will be active. GRAYLOG_LABEL_INSTANCE_N is optional — defaults to 'instance_N'."
+        }
     }
 }
