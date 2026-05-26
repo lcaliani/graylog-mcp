@@ -8,25 +8,72 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import axios from "axios";
 
-const PLANS = {
-    negocio: {
-        baseUrl:  process.env.BASE_URL_NEGOCIO  ?? process.env.BASE_URL   ?? null,
-        apiToken: process.env.API_TOKEN_NEGOCIO ?? process.env.API_TOKEN  ?? null,
-    },
-    debug: {
-        baseUrl:  process.env.BASE_URL_DEBUG    ?? null,
-        apiToken: process.env.API_TOKEN_DEBUG   ?? null,
-    },
-};
+// Load all Graylog instances from environment variables (no fixed limit).
+// An instance is active only if both BASE_URL and API_TOKEN are set.
+// Instances are discovered by scanning env vars matching GRAYLOG_BASE_URL_INSTANCE_N,
+// where N is any positive integer. They are sorted numerically before use.
+// Backward compatibility: BASE_URL + API_TOKEN (no suffix) map to INSTANCE_1.
+function loadInstances() {
+    // Collect all instance numbers declared via GRAYLOG_BASE_URL_INSTANCE_N
+    const declaredNumbers = Object.keys(process.env)
+        .map(key => key.match(/^GRAYLOG_BASE_URL_INSTANCE_(\d+)$/))
+        .filter(Boolean)
+        .map(match => parseInt(match[1], 10))
+        .sort((a, b) => a - b);
 
-// Default to "debug" only if negocio is not configured but debug is; otherwise default to "negocio"
-const DEFAULT_PLAN = (PLANS.negocio.baseUrl == null && PLANS.debug.baseUrl != null)
-    ? "debug"
-    : "negocio";
+    // Always attempt instance 1 to support the BASE_URL fallback
+    const numbers = declaredNumbers.includes(1) ? declaredNumbers : [1, ...declaredNumbers];
+
+    const instances = [];
+
+    for (const i of numbers) {
+        const baseUrl  = process.env[`GRAYLOG_BASE_URL_INSTANCE_${i}`]
+                      ?? (i === 1 ? process.env.BASE_URL  : null)
+                      ?? null;
+        const apiToken = process.env[`GRAYLOG_API_TOKEN_INSTANCE_${i}`]
+                      ?? (i === 1 ? process.env.API_TOKEN : null)
+                      ?? null;
+        const label    = process.env[`GRAYLOG_LABEL_INSTANCE_${i}`]
+                      ?? `instance_${i}`;
+
+        if (baseUrl && apiToken) {
+            instances.push({ label, baseUrl, apiToken });
+        }
+    }
+
+    return instances;
+}
+
+const INSTANCES = loadInstances();
+
+if (INSTANCES.length === 0) {
+    console.error(
+        "[graylog-mcp] No Graylog instances configured. " +
+        "Set at least GRAYLOG_BASE_URL_INSTANCE_1 and GRAYLOG_API_TOKEN_INSTANCE_1."
+    );
+}
+
+// Build a lookup map by label for fast resolution.
+// If two instances share the same label, the first one wins and a warning is emitted.
+const INSTANCE_BY_LABEL = {};
+for (const inst of INSTANCES) {
+    if (INSTANCE_BY_LABEL[inst.label]) {
+        console.error(
+            `[graylog-mcp] Warning: duplicate label "${inst.label}" — ` +
+            `only the first instance with this label will be used. ` +
+            `Check your GRAYLOG_LABEL_INSTANCE_N configuration.`
+        );
+    } else {
+        INSTANCE_BY_LABEL[inst.label] = inst;
+    }
+}
+
+const DEFAULT_INSTANCE = INSTANCES[0] ?? null;
+const ACTIVE_LABELS    = INSTANCES.map(i => i.label);
 
 const server = new Server({
     name: "simple-graylog-mcp",
-    version: "1.1.0",
+    version: "2.0.0",
 }, {
     capabilities: {
         tools: {},
@@ -34,42 +81,41 @@ const server = new Server({
 });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const instanceList = ACTIVE_LABELS.length > 0
+        ? ACTIVE_LABELS.map(l => `"${l}"`).join(", ")
+        : "(none configured)";
+
     return {
         tools: [
             {
                 name: "fetch_graylog_messages",
-                description: `Fetch messages from Graylog.
+                description: `Fetch messages from a Graylog instance.
 
-Two plans are available, each pointing to a different Graylog server:
-- "negocio": business/audit logs — seller configuration changes, rule changes, integrator events.
-             Fields: seller_id, type, name, full_message.
-- "debug":   technical execution logs — stack traces, request flow, inter-service calls.
-             Fields: ctxt_store_id, ctxt_session_id, ctxt_order_id, ctxt_* (varies by system).
+Active instances: ${instanceList}.
+Default instance: "${DEFAULT_INSTANCE?.label ?? "none"}".
 
-Choose the plan based on what you need to investigate:
-- "negocio" → what happened (audit trail, who changed what, when)
-- "debug"   → why it happened (stack trace, exact execution path, service errors)
-
-Choose the plan that matches your Graylog setup and document confirmed fields per system in your own knowledge base.`,
+Use the "instance" parameter to target a specific Graylog server.
+Each instance is identified by its label (set via GRAYLOG_LABEL_INSTANCE_N env var).
+If no label is configured, instances are identified as "instance_1", "instance_2", etc.`,
                 inputSchema: {
                     type: "object",
                     properties: {
-                        plan: {
+                        instance: {
                             type: "string",
-                            enum: ["negocio", "debug"],
-                            description: `Which Graylog server to query. Default: "${DEFAULT_PLAN}".`,
+                            enum: ACTIVE_LABELS.length > 0 ? ACTIVE_LABELS : undefined,
+                            description: `Which Graylog instance to query. Active: ${instanceList}. Default: "${DEFAULT_INSTANCE?.label ?? "none"}".`,
                         },
                         query: {
                             type: "string",
-                            description: "The query to search for, with the respective fields and values",
+                            description: "The search query, using Graylog query syntax (e.g. \"level:ERROR AND service:api\").",
                         },
                         searchTimeRangeInSeconds: {
                             type: "number",
-                            description: "The time range to search for, in seconds. Default: 900 (15 minutes).",
+                            description: "Relative time range in seconds. Default: 900 (15 minutes).",
                         },
                         searchCountLimit: {
                             type: "number",
-                            description: "The number of messages to fetch. Default: 50.",
+                            description: "Max number of messages to return. Default: 50.",
                         },
                         fields: {
                             type: "string",
@@ -94,28 +140,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function fetchGraylogMessages(request) {
     const args = request.params.arguments ?? {};
 
-    const planName = args.plan ?? DEFAULT_PLAN;
-    const plan = PLANS[planName];
+    const requestedLabel = args.instance ?? DEFAULT_INSTANCE?.label;
+    const instance = INSTANCE_BY_LABEL[requestedLabel] ?? null;
 
-    if (!plan || plan.baseUrl == null || plan.apiToken == null) {
+    if (!instance) {
+        const available = ACTIVE_LABELS.length > 0
+            ? `Available instances: ${ACTIVE_LABELS.join(", ")}.`
+            : "No instances are configured. Set GRAYLOG_BASE_URL_INSTANCE_N and GRAYLOG_API_TOKEN_INSTANCE_N.";
         return {
             result: [],
             content: [{
                 type: "text",
-                text: `Plan "${planName}" is not configured. ` +
-                      `Set BASE_URL_${planName.toUpperCase()} and API_TOKEN_${planName.toUpperCase()} ` +
-                      `environment variables in the MCP server config.`,
+                text: `Graylog instance "${requestedLabel}" not found. ${available}`,
             }],
         };
     }
 
-    const query                  = args.query;
+    const query                    = args.query;
     const searchTimeRangeInSeconds = args.searchTimeRangeInSeconds ?? 900;
-    const searchCountLimit       = args.searchCountLimit ?? 50;
-    const fields                 = args.fields ?? '*';
+    const searchCountLimit         = args.searchCountLimit ?? 50;
+    const fields                   = args.fields ?? '*';
 
     try {
-        const response = await axios.get(`${plan.baseUrl}/api/search/universal/relative`, {
+        const response = await axios.get(`${instance.baseUrl}/api/search/universal/relative`, {
             params: {
                 query,
                 range: searchTimeRangeInSeconds,
@@ -126,13 +173,13 @@ async function fetchGraylogMessages(request) {
                 'Accept': 'application/json',
             },
             auth: {
-                username: plan.apiToken,
+                username: instance.apiToken,
                 password: 'token',
             },
         });
 
         if (process.env.DEBUG === "true") {
-            console.error(`[graylog-mcp] plan=${planName} query=${query} hits=${response.data?.total_results ?? '?'}`);
+            console.error(`[graylog-mcp] instance=${instance.label} query=${query} hits=${response.data?.total_results ?? '?'}`);
         }
 
         return {
@@ -143,12 +190,12 @@ async function fetchGraylogMessages(request) {
             }],
         };
     } catch (error) {
-        console.error(`[graylog-mcp] Error fetching messages (plan=${planName}):`, error.message);
+        console.error(`[graylog-mcp] Error fetching messages (instance=${instance.label}):`, error.message);
         return {
             result: [],
             content: [{
                 type: "text",
-                text: `Error fetching messages from plan "${planName}": ${error.message}`,
+                text: `Error fetching messages from instance "${instance.label}": ${error.message}`,
             }],
         };
     }
