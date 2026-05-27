@@ -6,6 +6,7 @@ A minimal MCP (Model Context Protocol) server in JavaScript that integrates with
 
 - JavaScript MCP server
 - Tools: `fetch_graylog_messages` (query Graylog and return messages)
+- Multi-instance support — query multiple Graylog servers from a single MCP server
 
 ## Requirements
 
@@ -21,53 +22,103 @@ npm install
 
 ## Configuration
 
-Set the following environment variables so the server can connect to Graylog:
+Configure one or more Graylog instances using numbered env vars:
 
-- `BASE_URL`: Graylog base URL, e.g. `https://graylog.example.com`
-- `API_TOKEN`: Graylog API token (used as the username, with password `token`)
+| Variable | Required | Description |
+|---|---|---|
+| `GRAYLOG_BASE_URL_INSTANCE_N` | yes | Graylog base URL for instance N |
+| `GRAYLOG_API_TOKEN_INSTANCE_N` | yes | API token for instance N |
+| `GRAYLOG_LABEL_INSTANCE_N` | no | Human-readable label (default: `instance_N`) |
 
-> :exclamation: Suggestion: add these variables to your respective MCP client configuration file or app. Example in **Cursor** more below.
+Replace `N` with `1`, `2`, `3`, … to register as many instances as needed. Only instances with both `BASE_URL` and `API_TOKEN` set will be active.
 
+## Use with an MCP client
 
-## Use with an MCP client (Cursor/Claude Desktop)
+### Claude Code
 
-1. Add this server to your MCP client configuration, poiting to the mcp entrypoint file (`src/index.js`). Common locations:
+Run the following command to register the server _(example with two instances)_:
 
-- Cursor: `~/.cursor/mcp.json`
-- Claude Desktop (macOS): `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Claude Desktop (Linux): `~/.config/claude-desktop/claude_desktop_config.json`
+```bash
+claude mcp add graylog-mcp node /path/to/graylog-mcp/src/index.js \
+  -e GRAYLOG_BASE_URL_INSTANCE_1=http://your-graylog-production.example.com:9000 \
+  -e GRAYLOG_API_TOKEN_INSTANCE_1=your_production_token \
+  -e GRAYLOG_LABEL_INSTANCE_1=production \
+  -e GRAYLOG_BASE_URL_INSTANCE_2=http://your-graylog-staging.example.com:9000 \
+  -e GRAYLOG_API_TOKEN_INSTANCE_2=your_staging_token \
+  -e GRAYLOG_LABEL_INSTANCE_2=staging
+```
 
-Example config in **Cursor**:
+Or add it manually to `~/.claude.json`:
 
 ```json
 {
   "mcpServers": {
-    "simple-graylog-mcp": {
+    "graylog-mcp": {
       "command": "node",
       "args": [
         "/path/to/graylog-mcp/src/index.js"
       ],
       "env": {
-        "BASE_URL": "http://your.graylog.server.net.br:9000",
-        "API_TOKEN": "your_graylog_api_token"
+        "GRAYLOG_BASE_URL_INSTANCE_1":  "http://your-graylog-production.example.com:9000",
+        "GRAYLOG_API_TOKEN_INSTANCE_1": "your_production_token",
+        "GRAYLOG_LABEL_INSTANCE_1":     "production",
+
+        "GRAYLOG_BASE_URL_INSTANCE_2":  "http://your-graylog-staging.example.com:9000",
+        "GRAYLOG_API_TOKEN_INSTANCE_2": "your_staging_token",
+        "GRAYLOG_LABEL_INSTANCE_2":     "staging"
       }
     }
   }
 }
 ```
 
-2. After that, your client is already able to use the `fetch_graylog_messages` tool. Example prompt:
+### Cursor
+
+Add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "graylog-mcp": {
+      "command": "node",
+      "args": [
+        "/path/to/graylog-mcp/src/index.js"
+      ],
+      "env": {
+        "GRAYLOG_BASE_URL_INSTANCE_1":  "http://your-graylog-production.example.com:9000",
+        "GRAYLOG_API_TOKEN_INSTANCE_1": "your_production_token",
+        "GRAYLOG_LABEL_INSTANCE_1":     "production",
+
+        "GRAYLOG_BASE_URL_INSTANCE_2":  "http://your-graylog-staging.example.com:9000",
+        "GRAYLOG_API_TOKEN_INSTANCE_2": "your_staging_token",
+        "GRAYLOG_LABEL_INSTANCE_2":     "staging"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Config file locations:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Linux: `~/.config/claude-desktop/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Use the same JSON structure shown above for Cursor.
+
+---
+
+Once configured, use the `fetch_graylog_messages` tool. Example prompts:
 
 ```
-Search for the latest 20 error logs of the example application, given that they occurred in the last 15 minutes.
+Search for the latest 20 error logs of the example application in the last 15 minutes.
 ```
 
-This should be enough for the tool to be used, but if wanted, you can also explicitly "force" the use of the tool. Example prompt:
-
 ```
-Search for the latest 20 error logs of the example application, given that they occurred in the last 15 minutes.
-
-use simple-graylog-mcp
+Search for the latest 20 error logs of the example application in the last 15 minutes.
+Query the "staging" Graylog instance.
 ```
 
 
@@ -79,16 +130,18 @@ Fetch messages from Graylog.
 
 Parameters:
 
-- `query` (string): Search query. Example: `level:ERROR AND service:api`.
+- `query` (string, **required**): Search query. Example: `level:ERROR AND service:api`.
+- `instance` (string, optional): Label of the Graylog instance to query. Defaults to the first configured instance.
 - `searchTimeRangeInSeconds` (number, optional): Relative time range in seconds. Default: `900` (15 minutes).
 - `searchCountLimit` (number, optional): Max number of messages. Default: `50`.
-- `fields` (string, optional): Comma-separated fields to include. Default: `*`.
+- `fields` (string, optional): Comma-separated fields to include. Default: `*` (all fields).
 
 ## Troubleshooting
 
-- Ensure `BASE_URL` and `API_TOKEN` are set.
+- Ensure at least `GRAYLOG_BASE_URL_INSTANCE_1` and `GRAYLOG_API_TOKEN_INSTANCE_1` are set
 - Verify Node.js version is 18+.
 - Run `npm install` if dependencies are missing.
+- Set `DEBUG=true` in the env to enable verbose logging to stderr.
 
 ## License
 
