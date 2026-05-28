@@ -12,14 +12,6 @@ A minimal MCP (Model Context Protocol) server in JavaScript that integrates with
 
 - Node.js 18+
 
-## Installation
-
-```bash
-git clone git@github.com:lcaliani/graylog-mcp.git
-cd graylog-mcp
-npm install
-```
-
 ## Configuration
 
 Configure one or more Graylog instances using numbered env vars:
@@ -34,12 +26,12 @@ Replace `N` with `1`, `2`, `3`, … to register as many instances as needed. Onl
 
 ## Use with an MCP client
 
+No installation needed — `npx` downloads and runs the server automatically.
+
 ### Claude Code
 
-Run the following command to register the server _(example with two instances)_:
-
 ```bash
-claude mcp add graylog-mcp node /path/to/graylog-mcp/src/index.js \
+claude mcp add graylog-mcp npx graylog-mcp-server@latest \
   -e GRAYLOG_BASE_URL_INSTANCE_1=http://your-graylog-production.example.com:9000 \
   -e GRAYLOG_API_TOKEN_INSTANCE_1=your_production_token \
   -e GRAYLOG_LABEL_INSTANCE_1=production \
@@ -54,10 +46,8 @@ Or add it manually to `~/.claude.json`:
 {
   "mcpServers": {
     "graylog-mcp": {
-      "command": "node",
-      "args": [
-        "/path/to/graylog-mcp/src/index.js"
-      ],
+      "command": "npx",
+      "args": ["graylog-mcp-server@latest"],
       "env": {
         "GRAYLOG_BASE_URL_INSTANCE_1":  "http://your-graylog-production.example.com:9000",
         "GRAYLOG_API_TOKEN_INSTANCE_1": "your_production_token",
@@ -80,10 +70,8 @@ Add to `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "graylog-mcp": {
-      "command": "node",
-      "args": [
-        "/path/to/graylog-mcp/src/index.js"
-      ],
+      "command": "npx",
+      "args": ["graylog-mcp-server@latest"],
       "env": {
         "GRAYLOG_BASE_URL_INSTANCE_1":  "http://your-graylog-production.example.com:9000",
         "GRAYLOG_API_TOKEN_INSTANCE_1": "your_production_token",
@@ -110,7 +98,9 @@ Use the same JSON structure shown above for Cursor.
 
 ---
 
-Once configured, use the `fetch_graylog_messages` tool. Example prompts:
+## Use
+
+Once configured, the `fetch_graylog_messages` tool becomes available and will be automatically called when needed. Example prompts:
 
 ```
 Search for the latest 20 error logs of the example application in the last 15 minutes.
@@ -138,9 +128,8 @@ Parameters:
 
 ## Troubleshooting
 
-- Ensure at least `GRAYLOG_BASE_URL_INSTANCE_1` and `GRAYLOG_API_TOKEN_INSTANCE_1` are set
-- Verify Node.js version is 18+.
-- Run `npm install` if dependencies are missing.
+- Ensure at least `GRAYLOG_BASE_URL_INSTANCE_1` and `GRAYLOG_API_TOKEN_INSTANCE_1` are set.
+- Verify Node.js 18+ is installed.
 - Set `DEBUG=true` in the env to enable verbose logging to stderr.
 
 ## License
