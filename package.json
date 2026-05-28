@@ -1,6 +1,6 @@
 {
     "name": "graylog-mcp-server",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "MCP server for fetching data from Graylog",
     "main": "src/index.js",
     "bin": {
