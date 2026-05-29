@@ -31,7 +31,7 @@ No installation needed — `npx` downloads and runs the server automatically.
 ### Claude Code
 
 ```bash
-claude mcp add graylog-mcp npx graylog-mcp-server@latest \
+claude mcp add graylog-mcp npx @lcaliani/graylog-mcp-server@latest \
   -e GRAYLOG_BASE_URL_INSTANCE_1=http://your-graylog-production.example.com:9000 \
   -e GRAYLOG_API_TOKEN_INSTANCE_1=your_production_token \
   -e GRAYLOG_LABEL_INSTANCE_1=production \
