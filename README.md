@@ -47,7 +47,7 @@ Or add it manually to `~/.claude.json`:
   "mcpServers": {
     "graylog-mcp": {
       "command": "npx",
-      "args": ["graylog-mcp-server@latest"],
+      "args": ["@lcaliani/graylog-mcp-server@latest"],
       "env": {
         "GRAYLOG_BASE_URL_INSTANCE_1":  "http://your-graylog-production.example.com:9000",
         "GRAYLOG_API_TOKEN_INSTANCE_1": "your_production_token",
@@ -71,7 +71,7 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "graylog-mcp": {
       "command": "npx",
-      "args": ["graylog-mcp-server@latest"],
+      "args": ["@lcaliani/graylog-mcp-server@latest"],
       "env": {
         "GRAYLOG_BASE_URL_INSTANCE_1":  "http://your-graylog-production.example.com:9000",
         "GRAYLOG_API_TOKEN_INSTANCE_1": "your_production_token",
